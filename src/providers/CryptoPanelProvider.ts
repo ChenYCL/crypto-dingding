@@ -8,6 +8,7 @@ export class CryptoPanelProvider implements vscode.Disposable {
     private panel: vscode.WebviewPanel | undefined;
     private webSocketManager: WebSocketManager;
     private disposables: vscode.Disposable[] = [];
+    private onFavoritesChanged?: () => void;
 
     constructor(
         private readonly extensionUri: vscode.Uri,
@@ -16,6 +17,10 @@ export class CryptoPanelProvider implements vscode.Disposable {
         private readonly statusBarTicker?: any
     ) {
         this.webSocketManager = new WebSocketManager();
+    }
+
+    public setFavoritesChangeCallback(callback: () => void) {
+        this.onFavoritesChanged = callback;
     }
 
     public createOrShow(): void {
@@ -69,21 +74,64 @@ export class CryptoPanelProvider implements vscode.Disposable {
             });
         });
 
+        // 订阅默认币种
+        const defaultSymbols = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'ADAUSDT'];
+        defaultSymbols.forEach(symbol => {
+            this.webSocketManager.subscribe(symbol, 'spot');
+            this.webSocketManager.subscribe(symbol, 'futures');
+        });
+
         // 设置价格提醒检查
         this.webSocketManager.onPriceAlert((symbol, price) => {
             this.priceAlertManager.checkPriceAlerts(symbol, price);
         });
+
+        // 初始化时发送收藏夹数据
+        setTimeout(async () => {
+            const favorites = await this.favoritesManager.getFavorites();
+            this.panel?.webview.postMessage({
+                type: 'favorites',
+                data: favorites
+            });
+
+            // 订阅收藏的币种
+            favorites.forEach(symbol => {
+                this.webSocketManager.subscribe(symbol, 'spot');
+                this.webSocketManager.subscribe(symbol, 'futures');
+            });
+        }, 1000);
     }
 
     private async handleWebviewMessage(message: any): Promise<void> {
         switch (message.type) {
             case 'addFavorite':
                 if (message.symbol) {
+                    console.log(`Adding favorite: ${message.symbol}`);
                     await this.favoritesManager.addFavorite(message.symbol);
+
+                    // 立即订阅新币种
+                    this.webSocketManager.subscribe(message.symbol, 'spot');
+                    this.webSocketManager.subscribe(message.symbol, 'futures');
+
+                    // 发送添加成功消息
                     this.panel?.webview.postMessage({
                         type: 'favoriteAdded',
                         symbol: message.symbol
                     });
+
+                    // 发送更新后的收藏列表
+                    const updatedFavorites = await this.favoritesManager.getFavorites();
+                    this.panel?.webview.postMessage({
+                        type: 'favorites',
+                        data: updatedFavorites
+                    });
+
+                    console.log(`Favorite added successfully: ${message.symbol}`);
+
+                    // 通知侧边栏更新
+                    if (this.onFavoritesChanged) {
+                        this.onFavoritesChanged();
+                    }
                 }
                 break;
             case 'removeFavorite':
@@ -93,6 +141,18 @@ export class CryptoPanelProvider implements vscode.Disposable {
                         type: 'favoriteRemoved',
                         symbol: message.symbol
                     });
+
+                    // 同时更新收藏列表
+                    const updatedFavorites = await this.favoritesManager.getFavorites();
+                    this.panel?.webview.postMessage({
+                        type: 'favorites',
+                        data: updatedFavorites
+                    });
+
+                    // 通知侧边栏更新
+                    if (this.onFavoritesChanged) {
+                        this.onFavoritesChanged();
+                    }
                 }
                 break;
             case 'setPriceAlert':
@@ -141,6 +201,12 @@ export class CryptoPanelProvider implements vscode.Disposable {
                         message.symbols.forEach((symbol: string) => {
                             this.webSocketManager.subscribe(symbol, 'spot');
                             this.webSocketManager.subscribe(symbol, 'futures');
+                        });
+
+                        // 发送更新确认
+                        this.panel?.webview.postMessage({
+                            type: 'statusBarConfig',
+                            symbols: message.symbols
                         });
 
                         vscode.window.showInformationMessage(`✅ 状态栏配置已更新: ${message.symbols.join(', ')}`);
@@ -771,6 +837,10 @@ export class CryptoPanelProvider implements vscode.Disposable {
 
         // 初始化
         window.addEventListener('load', () => {
+            // 确保默认显示现货tab
+            currentTab = 'spot';
+            document.getElementById('spot').classList.add('active');
+
             vscode.postMessage({ type: 'getFavorites' });
 
             // 订阅默认币种
@@ -783,7 +853,7 @@ export class CryptoPanelProvider implements vscode.Disposable {
             // 隐藏加载提示，显示网格
             setTimeout(() => {
                 document.querySelectorAll('.loading').forEach(el => el.style.display = 'none');
-            }, 2000);
+            }, 3000);
         });
 
         // 监听来自extension的消息
@@ -795,9 +865,10 @@ export class CryptoPanelProvider implements vscode.Disposable {
                     updatePrice(message.data);
                     break;
                 case 'favorites':
-                    favorites = message.data;
+                    console.log('Received favorites data:', message.data);
+                    favorites = message.data || [];
                     updateFavoriteButtons();
-                    updateFavoritesList();
+                    updateFavoritesDisplay();
                     break;
                 case 'favoriteAdded':
                     favorites.push(message.symbol);
@@ -839,14 +910,41 @@ export class CryptoPanelProvider implements vscode.Disposable {
             const symbol = input.value.trim().toUpperCase();
 
             if (symbol && !favorites.includes(symbol)) {
+                console.log('Adding favorite from panel:', symbol);
+
+                // 立即添加到本地数组
+                favorites.push(symbol);
+
+                // 发送消息到后端
                 vscode.postMessage({ type: 'addFavorite', symbol: symbol });
                 input.value = '';
+
+                // 立即更新显示
+                updateFavoritesDisplay();
+                updateFavoriteButtons();
+
                 showToast(\`已添加 \${symbol} 到收藏夹\`, 'success');
+            } else if (favorites.includes(symbol)) {
+                showToast(\`\${symbol} 已在收藏夹中\`, 'warning');
             }
         }
 
         function removeFavorite(symbol) {
+            console.log('Removing favorite from panel:', symbol);
+
+            // 立即从本地数组移除
+            const index = favorites.indexOf(symbol);
+            if (index > -1) {
+                favorites.splice(index, 1);
+            }
+
+            // 发送消息到后端
             vscode.postMessage({ type: 'removeFavorite', symbol: symbol });
+
+            // 立即更新显示
+            updateFavoritesDisplay();
+            updateFavoriteButtons();
+
             showToast(\`已从收藏夹移除 \${symbol}\`, 'info');
         }
 
@@ -977,6 +1075,8 @@ export class CryptoPanelProvider implements vscode.Disposable {
         function updateFavoritesDisplay() {
             const favoritesGrid = document.getElementById('favoritesGrid');
             if (!favoritesGrid) return;
+
+            console.log('Updating favorites display, favorites:', favorites);
 
             if (favorites.length === 0) {
                 favoritesGrid.innerHTML = '<p style="text-align: center; color: var(--vscode-descriptionForeground); padding: 20px;">暂无收藏币种，点击上方添加或在价格卡片上点击⭐</p>';

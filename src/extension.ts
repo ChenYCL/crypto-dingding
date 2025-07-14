@@ -23,6 +23,11 @@ export async function activate(context: vscode.ExtensionContext) {
     // 创建面板提供者
     const cryptoPanelProvider = new CryptoPanelProvider(context.extensionUri, priceAlertManager, favoritesManager, statusBarTicker);
 
+    // 设置收藏变化回调，让面板能通知侧边栏更新
+    cryptoPanelProvider.setFavoritesChangeCallback(() => {
+        priceTreeProvider.refresh();
+    });
+
     // 注册树视图
     vscode.window.registerTreeDataProvider('cryptop.priceTreeView', priceTreeProvider);
 
@@ -187,8 +192,7 @@ export async function activate(context: vscode.ExtensionContext) {
         webSocketManager
     );
 
-    // 启动时自动打开面板
-    cryptoPanelProvider.createOrShow();
+    // 不自动打开面板，让用户手动打开
 }
 
 export function deactivate() {
