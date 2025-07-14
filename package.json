@@ -1,0 +1,154 @@
+{
+  "name": "cryptop-dingding",
+  "displayName": "CryptoP - 币圈价格监控",
+  "description": "专业的加密货币实时价格监控工具，支持现货期货、收藏管理、价格提醒等功能",
+  "version": "1.0.0",
+  "publisher": "ChenYCL",
+  "author": {
+    "name": "ChenYCL",
+    "email": "aa34913@gmail.com"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/ChenYCL/cryptop-dingding",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ChenYCL/cryptop-dingding.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ChenYCL/cryptop-dingding/issues"
+  },
+  "keywords": [
+    "cryptocurrency",
+    "crypto",
+    "bitcoin",
+    "ethereum",
+    "price",
+    "monitoring",
+    "trading",
+    "binance",
+    "real-time",
+    "websocket"
+  ],
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other",
+    "Data Science",
+    "Visualization"
+  ],
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "cryptop.openPanel",
+        "title": "打开币圈价格面板",
+        "category": "CryptoP"
+      },
+      {
+        "command": "cryptop.addFavorite",
+        "title": "添加收藏",
+        "category": "CryptoP"
+      },
+      {
+        "command": "cryptop.setPriceAlert",
+        "title": "设置价格提醒",
+        "category": "CryptoP"
+      },
+      {
+        "command": "cryptop.refreshPrices",
+        "title": "刷新价格",
+        "category": "CryptoP",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "cryptop.configureStatusBar",
+        "title": "配置状态栏显示币种",
+        "category": "CryptoP",
+        "icon": "$(settings-gear)"
+      }
+    ],
+    "views": {
+      "cryptop": [
+        {
+          "id": "cryptop.priceTreeView",
+          "name": "实时价格",
+          "when": "true"
+        }
+      ],
+      "explorer": [
+        {
+          "id": "cryptop.priceView",
+          "name": "币圈价格",
+          "when": "true"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "cryptop",
+          "title": "CryptoP",
+          "icon": "$(graph)"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "cryptop.openPanel",
+          "when": "view == cryptop.priceView",
+          "group": "navigation"
+        },
+        {
+          "command": "cryptop.refreshPrices",
+          "when": "view == cryptop.priceTreeView",
+          "group": "navigation"
+        },
+        {
+          "command": "cryptop.configureStatusBar",
+          "when": "view == cryptop.priceTreeView",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "cryptop.addFavorite",
+          "when": "view == cryptop.priceTreeView && viewItem == cryptoPrice",
+          "group": "inline"
+        },
+        {
+          "command": "cryptop.setPriceAlert",
+          "when": "view == cryptop.priceTreeView && viewItem == cryptoPrice",
+          "group": "inline"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package",
+    "package:install": "npm run package && code --install-extension *.vsix",
+    "clean": "rm -rf out *.vsix",
+    "build": "npm run clean && npm run compile && npm run package"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.74.0",
+    "@types/ws": "^8.18.1",
+    "@vscode/vsce": "^3.6.0",
+    "typescript": "^4.9.4"
+  },
+  "dependencies": {
+    "ws": "^8.14.2"
+  }
+}
